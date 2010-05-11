@@ -1,0 +1,93 @@
+//=======================================================================
+//	
+//	《登録ファイルリストからファイルを開くマクロ ver1.00  by tetu-dc5》
+//	
+//	$LIST_PATHにリストファイル名を設定してください。
+//	リストファイルのフォーマットは
+//	表示名//フルパス
+//	です。１行１ファイルで登録します。
+//	
+//	※表示位置・サイズ・フォントなどのカスタマイズ機能はありません。
+//	
+//=======================================================================
+boot:
+	//	リストファイル名を設定してください。
+	$LIST_PATH  = "C:\\......\\project_dir\\src_list.txt";
+	#SEARCH_MODE           = 2;	//	0:単純文字列     1:ワイルドカード  2:正規表現(HmJre.dll)
+	#ENABLE_INSERT_INCLUDE = 1;	//	[F01]で選択ファイルのinclude文を挿入する機能を有効にする
+	#ENABLE_BUILD_BAT      = 1;	//	[F02]で$LIST_PATの拡張子を.batにしたものを起動する
+	call main;
+	endmacro;
+
+main:
+	loaddll "TtHideTools.dll";
+	##res  = dllfunc   ("LIST_CREATE", "プロジェクトファイル選択", #SEARCH_MODE);
+	##res  = dllfunc   ("LIST_INIT_SEARCH", 1);
+	##res  = dllfunc   ("LIST_ADD_STRING_FROM_FILE", $LIST_PATH);
+	##res  = dllfunc   ("LIST_SET_SIZE", 300, 500);
+	$$name = dllfuncstr("LIST_SHOW");
+	##res  = dllfunc   ("LIST_DESTROY");
+	freedll;
+	if(ascii($$name)==0x5C){
+		if(#ENABLE_INSERT_INCLUDE && strstr($$name, "\\F01")==0){
+			call insert_include, $$name;
+		}
+		if(#ENABLE_BUILD_BAT && strstr($$name, "\\F02")==0){
+			call exec_bat;
+			call close_output;
+		}
+	}
+	else if(strlen($$name)){
+		##pos = strstr($$name, "//");
+		if(##pos>=0){
+			$$name = midstr($$name, ##pos+2);
+			openfile $$name;
+		}
+	}
+	return;
+
+//=======================================================================
+//	BAT実行
+//	  プロジェクトのトップディレクトリの"src_list.bat"を起動
+//=======================================================================
+exec_bat:
+	##pos = strrstr($LIST_PATH, ".");
+	if(##pos>=0){
+		$$bat = leftstr($LIST_PATH, ##pos) + ".bat";
+	}
+	else{
+		$$bat = $LIST_PATH + ".bat";
+	}
+	runex "cmd.exe /c " + $$bat
+		, 1
+		, 0,""
+		, 7,""
+		, 1,""
+		, 0,""
+		, 0
+		, 1
+		, 0
+		;
+	return;
+
+//=======================================================================
+//	Output枠を閉じる
+//=======================================================================
+close_output:
+	##h=inputchar("何かキーを押してください");
+	loaddll "HmOutputPane.dll";
+	##h=dllfunc("GetWindowHandle",hidemaruhandle(0));
+	##ret=sendmessage(##h,0x111/*WM_COMMAND*/,1001,0);//1001=枠を閉じる
+	freedll;
+	return;
+
+//=======================================================================
+//	#includeの挿入
+//=======================================================================
+insert_include:
+	##pos = strstr($$1, "//");
+	$$1 = midstr($$1,5,##pos-5);
+	golinetop2;
+	insert "#include	\"" + $$1 + "\"\n";
+	return;
+

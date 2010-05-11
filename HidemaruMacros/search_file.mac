@@ -1,0 +1,167 @@
+//=======================================================================
+//	
+//	《ファイルを切り替えマクロ ver1.00  by tetu-dc5》
+//	
+//	#SEARCH_ON_START=0は[CTRL+TAB]に割り当てたときに最適に動作する
+//	設定です。(CTRLを離すと選択ファイルに切り替えます）
+//	また、リスト表示中にとき[ENTER]で検索モードに切り替わります。
+//	
+//	検索モード時は[ENTER]で選択です。
+//	
+//	※表示位置・サイズ・フォントなどのカスタマイズ機能はありません。
+//	
+//=======================================================================
+boot:
+	#SEARCH_ON_START   = 0;	//	起動直後に検索を有効にする  								（0:CTRL+TABに最適化）
+	#ENABLE_MASK_CLOSE = 1;	//	[F01]でリストのファイルを閉じる機能を有効にする。			（検索モード時のみ）
+	#ENABLE_MASK_SPLIT = 1;	//	[F02]でリストのファイルを分離する機能を有効にする。			（検索モード時のみ・タブ動作時のみ）
+	#GROUP_LIST        = 1;	//	同グループ内のリストのみ表示								（タブ動作時のみ）
+	#SEARCH_MODE       = 2;	//	0:単純文字列     1:ワイルドカード  2:正規表現(HmJre.dll)
+	#FULLPATH          = 0; //	0:ファイル名のみ 1:フルパス
+	call main;
+	endmacro;
+
+//=======================================================================
+//	メイン処理
+//=======================================================================
+main:
+	disablebreak;
+	if(#GROUP_LIST && tabmode)	call group_list;
+	else						call hidemaru_list;
+	call do_dialog, $$return;
+	if(ascii($name)==0x5C){
+		//"\\F01"～"\\F24"まで拡張可能
+		if     (#ENABLE_MASK_CLOSE && strstr($name, "\\F01")==0)				call close_files, ##return;
+		else if(#ENABLE_MASK_SPLIT && strstr($name, "\\F02")==0 && tabmode)		call split_files, ##return;
+	}
+	else if(strlen($name)){
+		call get_id, $name;
+		##id = ##return;
+		if(##id>0){
+			setactivehidemaru ##id;
+		}
+	}
+	return;
+
+//=======================================================================
+//	全秀丸リスト作成
+//=======================================================================
+hidemaru_list:
+	##i=1;
+	call get_name, 0;
+	$$items = $$return;
+	while(##i<hidemarucount){
+		call get_name, ##i;
+		$$items = $$items + "," + $$return;
+		##i = ##i + 1;
+	}
+	return $$items;
+
+//=======================================================================
+//	グループ内リスト作成
+//=======================================================================
+group_list:
+	##i=1;
+	call get_name, 0;
+	$$items = $$return;
+	while(##i<hidemarucount){
+		if(tabgroup == tabgroup[##i]){
+			call get_name, ##i;
+			$$items = $$items + "," + $$return;
+		}
+		##i = ##i + 1;
+	}
+	return $$items;
+
+//=======================================================================
+//	ファイルIDから"表示名//ID"形式に変換する
+//=======================================================================
+get_name:
+	##type = ascii(filetype[##1]);
+	if(##type==0x2E){
+		if(#FULLPATH){
+			$$tmp = filename2[##1];	//	通常ファイル
+		}
+		else{
+			$$tmp = basename2[##1];	//	通常ファイル
+		}
+	}
+	else if(##type==0x6E) $$tmp = "無題";		//	無題
+	else if(##type==0x67) $$tmp = "grep";		//	grep
+	else if(##type==0x65) $$tmp = "実行結果";	//	実行結果
+	else if(##type==0x67) $$tmp = "ブラウザー";	//	ブラウザー
+	else $$tmp = "???";							//	その他
+	if(updated[##1]) $$tmp = $$tmp + "*";		//	変更されている場合は"*"を追加
+	$$tmp = $$tmp + "//" + str(##1+1);			//	hidemaru番号+1をコメントとして後ろに追加
+	return $$tmp;
+
+//=======================================================================
+//	"表示名//ID"からファイルIDに変換する
+//=======================================================================
+get_id:
+	##pos = strstr($$1, "//");
+	if(##pos>=0){
+		return val(midstr($$1, ##pos+2))-1;
+	}
+	return 0;
+
+//=======================================================================
+//	リストダイアログを表示する
+//	結果は$nameに返す
+//	またリスト内容を$list[]に返す
+//	戻り値として、$list[]の要素数を返す
+//=======================================================================
+do_dialog:
+	loaddll "TtHideTools.dll";
+	
+	##res  = dllfunc   ("LIST_CREATE", "ファイル選択", #SEARCH_MODE);
+	##res  = dllfunc   ("LIST_INIT_SEARCH", #SEARCH_ON_START);
+	##res  = dllfunc   ("LIST_ADD_STRING", $$1);
+	##res  = dllfunc   ("LIST_SET_SIZE", 300, 500);
+	$name  = dllfuncstr("LIST_SHOW");
+	##num = 0;
+	if(ascii($name)==0x5C){
+		##num = dllfunc   ("LIST_GET_VIEW_NUM");
+		##i=0;
+		while(##i<##num){
+			$list[##i] = dllfuncstr("LIST_GET_VIEW_ITEM", ##i);
+			##i = ##i + 1;
+		}
+	}
+	##res  = dllfunc   ("LIST_DESTROY");
+	
+	freedll;
+	return ##num;
+
+//=======================================================================
+//	リストアップされたファイルを閉じる
+//=======================================================================
+close_files:
+	##i  = ##1 - 1;
+	##me = 0;
+	while(##i>=0){
+		call get_id, $list[##i];
+		##id = ##return;
+		if(##id==0) ##me = 1;
+		else{
+			closehidemaru ##id;
+		}
+		##i = ##i - 1;
+	}
+	if(##me) exit;
+	return;
+
+//=======================================================================
+//	リストアップされたファイルを新規グループに分離する
+//=======================================================================
+split_files:
+	##i  = 0;
+	##next_group = -1;
+	while(##i<##1){
+		call get_id, $list[##i];
+		##id = ##return;
+		settabgroup ##id, ##next_group;
+		##next_group = tabgroup[##id];
+		##i = ##i + 1;
+	}
+	return;
