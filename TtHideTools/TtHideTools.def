@@ -1,0 +1,21 @@
+; TtHideTools.def : DLL のモジュール パラメータを宣言します。
+
+LIBRARY      "TtHideTools"
+
+SECTIONS
+	SHARE_DATA	READ WRITE SHARED
+
+EXPORTS
+    ; 明示的なエクスポートはここへ記述できます
+    MATCH_WILDCARD
+    
+    LIST_CREATE
+    LIST_DESTROY
+    LIST_INIT_SEARCH
+    LIST_SET_SEARCH_TEXT
+    LIST_ADD_STRING
+    LIST_ADD_STRING_FROM_FILE
+    LIST_SET_SIZE
+    LIST_SHOW
+    LIST_GET_VIEW_NUM
+    LIST_GET_VIEW_ITEM
